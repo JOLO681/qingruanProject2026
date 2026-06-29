@@ -63,7 +63,7 @@ INSERT INTO diabetes_types (name, image, pathogenesis, manifestation, treatment)
 );
 
 -- 示例科普文章（3 篇）
-INSERT INTO articles (title, author, content, category, views) VALUES
+INSERT INTO articles (title, author, content, category, views, summary, tags) VALUES
 (
     '糖尿病饮食管理的五大误区',
     'AI 健康助手',
@@ -91,7 +91,9 @@ INSERT INTO articles (title, author, content, category, views) VALUES
 
 糖尿病患者应在专业医师和营养师的指导下制定个体化饮食方案，根据自身血糖监测结果动态调整。',
     '饮食指导',
-    1280
+    1280,
+    '糖尿病饮食管理常见误区解析',
+    '["饮食指导","糖尿病知识科普"]'
 ),
 (
     '科学运动降血糖——给糖尿病患者的运动处方',
@@ -131,7 +133,9 @@ INSERT INTO articles (title, author, content, category, views) VALUES
 
 运动方案的制定应因人而异，建议在医生和运动指导师指导下，根据个人年龄、体能、并发症情况制定个体化运动处方。',
     '运动指南',
-    960
+    960,
+    '糖尿病患者科学运动指南',
+    '["运动指南","糖尿病知识科普"]'
 ),
 (
     '糖尿病早期筛查——这些风险因素你中了几条？',
@@ -163,5 +167,7 @@ INSERT INTO articles (title, author, content, category, views) VALUES
 
 早筛查、早发现、早干预——您的健康掌握在自己手中。',
     '糖尿病知识科普',
-    1560
+    1560,
+    '糖尿病早期筛查重要性',
+    '["糖尿病知识科普"]'
 );

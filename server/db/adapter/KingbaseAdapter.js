@@ -190,7 +190,11 @@ class KingbaseAdapter {
       // 运行时生成 admin123 的 bcrypt 哈希
       const bcrypt = require('bcryptjs');
       const hash = bcrypt.hashSync('admin123', 10);
+      const replaced = seedSql.includes('__BCRYPT_HASH_PLACEHOLDER__');
       seedSql = seedSql.replace('__BCRYPT_HASH_PLACEHOLDER__', hash);
+      if (!replaced) {
+        console.warn('[KingbaseAdapter] 种子 SQL 中未找到 __BCRYPT_HASH_PLACEHOLDER__ 占位符，admin 密码可能未正确设置');
+      }
 
       // 按分号分割种子 INSERT
       const seedStmts = seedSql
