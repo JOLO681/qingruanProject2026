@@ -194,6 +194,76 @@ async function insertAdminLog(adapter, operatorId, operationType, operationConte
   }
 }
 
+function splitByAnd(str) {
+  const parts = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (ch === "'") {
+      inQuotes = !inQuotes;
+      current += ch;
+    } else if (!inQuotes && str.substring(i, i + 5).toUpperCase() === ' AND ') {
+      parts.push(current.trim());
+      current = '';
+      i += 4;
+    } else {
+      current += ch;
+    }
+  }
+
+  if (current.trim()) {
+    parts.push(current.trim());
+  }
+
+  return parts;
+}
+
+function parseWhereClause(whereStr) {
+  if (!whereStr || typeof whereStr !== 'string' || whereStr.trim().length === 0) {
+    return { conditions: [], isValid: false };
+  }
+
+  const trimmed = whereStr.trim();
+  const parts = splitByAnd(trimmed);
+  const conditions = [];
+
+  for (const part of parts) {
+    const trimmedPart = part.trim();
+    // 仅允许: column_name = value
+    // column_name: 字母/下划线开头，字母数字下划线组成
+    // value: 单引号字符串或数字
+    const match = trimmedPart.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)$/);
+    if (!match) {
+      return { conditions: [], isValid: false };
+    }
+
+    const column = match[1];
+    const valueStr = match[2].trim();
+    let value;
+
+    // 字符串字面量 (单引号包裹)
+    if (valueStr.startsWith("'") && valueStr.endsWith("'")) {
+      value = valueStr.slice(1, -1);
+      // 拒绝空字符串值（如 ''）
+      if (value.length === 0) {
+        return { conditions: [], isValid: false };
+      }
+    } else if (!isNaN(Number(valueStr)) && valueStr !== '') {
+      // 数值字面量
+      value = Number(valueStr);
+    } else {
+      // 不支持的格式（如函数调用、子查询、运算符等）
+      return { conditions: [], isValid: false };
+    }
+
+    conditions.push({ column, value });
+  }
+
+  return { conditions, isValid: conditions.length > 0 };
+}
+
 async function dispatchParameterizedQuery(adapter, toolName, params, operatorId, operatorRole) {
   switch (toolName) {
     case 'query_user_profile': {
@@ -290,11 +360,21 @@ async function dispatchParameterizedQuery(adapter, toolName, params, operatorId,
         return { error: { code: 'VALIDATION_ERROR', message: 'ORDER BY 子句格式不合法' }, httpStatus: 400 };
       }
       let sql = `SELECT * FROM ${params.table}`;
-      if (params.where) sql += ` WHERE ${params.where}`;
+      const queryArgs = [];
+      if (params.where) {
+        const parsed = parseWhereClause(params.where);
+        if (!parsed.isValid) {
+          return { error: { code: 'VALIDATION_ERROR', message: 'WHERE 子句格式无效，仅允许 column = value AND column = value ... 模式' }, httpStatus: 400 };
+        }
+        const whereClauses = parsed.conditions.map(c => `${c.column} = ?`);
+        sql += ` WHERE ${whereClauses.join(' AND ')}`;
+        queryArgs.push(...parsed.conditions.map(c => c.value));
+      }
       if (params.order_by) sql += ` ORDER BY ${params.order_by}`;
       sql += ' LIMIT ? OFFSET ?';
+      queryArgs.push(params.limit || 20, params.offset || 0);
       try {
-        const rows = await adapter.query(sql, [params.limit || 20, params.offset || 0]);
+        const rows = await adapter.query(sql, queryArgs);
         return { rows };
       } catch (e) {
         return { error: { code: 'BAD_REQUEST', message: e.message }, httpStatus: 400 };
@@ -352,8 +432,16 @@ async function dispatchParameterizedQuery(adapter, toolName, params, operatorId,
 
       const setClause = keys.map(k => `${k} = ?`).join(', ');
       const args = keys.map(k => fields[k]);
+
+      const whereParsed = parseWhereClause(params.where);
+      if (!whereParsed.isValid) {
+        return { error: { code: 'VALIDATION_ERROR', message: 'WHERE 子句格式无效，仅允许 column = value AND column = value ... 模式' }, httpStatus: 400 };
+      }
+      const whereClauses = whereParsed.conditions.map(c => `${c.column} = ?`);
+      args.push(...whereParsed.conditions.map(c => c.value));
+
       try {
-        const info = await adapter.execute(`UPDATE ${params.table} SET ${setClause} WHERE ${params.where}`, args);
+        const info = await adapter.execute(`UPDATE ${params.table} SET ${setClause} WHERE ${whereClauses.join(' AND ')}`, args);
         return { rows: [{ changes: info.changes }], operation_type: 'UPDATE' };
       } catch (e) {
         return { error: { code: 'BAD_REQUEST', message: e.message }, httpStatus: 400 };
@@ -371,11 +459,14 @@ async function dispatchParameterizedQuery(adapter, toolName, params, operatorId,
       if (!params.where) {
         return { error: { code: 'VALIDATION_ERROR', message: '缺少条件' }, httpStatus: 400 };
       }
-      if (!parseWhereClause(params.where)) {
-        return { error: { code: 'VALIDATION_ERROR', message: 'WHERE 子句格式不合法' }, httpStatus: 400 };
+      const whereParsed = parseWhereClause(params.where);
+      if (!whereParsed.isValid) {
+        return { error: { code: 'VALIDATION_ERROR', message: 'WHERE 子句格式无效，仅允许 column = value AND column = value ... 模式' }, httpStatus: 400 };
       }
+      const whereClauses = whereParsed.conditions.map(c => `${c.column} = ?`);
+      const whereArgs = whereParsed.conditions.map(c => c.value);
       try {
-        const info = await adapter.execute(`DELETE FROM ${params.table} WHERE ${params.where}`, []);
+        const info = await adapter.execute(`DELETE FROM ${params.table} WHERE ${whereClauses.join(' AND ')}`, whereArgs);
         return { rows: [{ changes: info.changes }], operation_type: 'DELETE' };
       } catch (e) {
         return { error: { code: 'BAD_REQUEST', message: e.message }, httpStatus: 400 };

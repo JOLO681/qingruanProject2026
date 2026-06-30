@@ -11,6 +11,7 @@ import type { AdminLog } from '@/types/api'
 import SkeletonLoader from '@/components/SkeletonLoader.vue'
 import ErrorRetry from '@/components/ErrorRetry.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import DisclaimerBar from '@/components/DisclaimerBar.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -169,9 +170,7 @@ onUnmounted(() => {
         </button>
       </header>
 
-      <div class="disclaimer-bar">
-        <p>本管理助手由 AI 驱动，所有数据操作将被记录审计日志。</p>
-      </div>
+      <DisclaimerBar text="本管理助手由 AI 驱动，所有数据操作将被记录审计日志。" />
 
       <div ref="messagesContainer" class="admin-messages">
         <!-- 空引导 -->
@@ -361,20 +360,6 @@ onUnmounted(() => {
   color: var(--color-text-tertiary);
 }
 
-.disclaimer-bar {
-  padding: 6px var(--spacing-lg);
-  background: rgba(250, 173, 20, 0.08);
-  border-bottom: 1px solid rgba(250, 173, 20, 0.15);
-  flex-shrink: 0;
-}
-
-.disclaimer-bar p {
-  font-size: 11px;
-  color: #8c6f00;
-  text-align: center;
-  margin: 0;
-}
-
 .admin-messages {
   flex: 1;
   overflow-y: auto;
@@ -479,6 +464,36 @@ onUnmounted(() => {
   line-height: 1.5;
   word-break: break-word;
   border-radius: var(--radius-md);
+}
+
+/* G19: Markdown 子元素排版穿透 */
+.msg-content :deep(p) {
+  margin-bottom: var(--spacing-sm);
+}
+.msg-content :deep(ul),
+.msg-content :deep(ol) {
+  padding-left: var(--spacing-lg);
+  margin-bottom: var(--spacing-sm);
+}
+.msg-content :deep(li) {
+  margin-bottom: var(--spacing-xs);
+}
+.msg-content :deep(code) {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  font-family: var(--font-family);
+  font-size: 13px;
+}
+.msg-content :deep(blockquote) {
+  border-left: 3px solid var(--color-primary-light);
+  padding-left: var(--spacing-md);
+  margin: var(--spacing-sm) 0;
+  color: var(--color-text-secondary);
+}
+.msg-content :deep(strong) {
+  color: var(--color-text-primary);
+  font-weight: 600;
 }
 
 .message-bubble.sent .msg-content {

@@ -30,7 +30,7 @@ router.post('/generate', authMiddleware, async (req, res, next) => {
     const err = validatePlanGenerate(req.body);
     if (err) throw new AppError(422, 'VALIDATION_ERROR', err);
 
-    // 幂等检查（在 Dify API 调用之前，节省配额）
+    // G12: 幂等检查移至 Dify API 调用之前，防止重复调用消耗 API token
     if (!checkIdempotent(req.user.user_id)) {
       throw new AppError(409, 'CONFLICT', '请求过于频繁，请稍后再试');
     }

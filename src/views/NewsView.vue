@@ -9,6 +9,7 @@ import SkeletonLoader from '@/components/SkeletonLoader.vue'
 import ErrorRetry from '@/components/ErrorRetry.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import DisclaimerBar from '@/components/DisclaimerBar.vue'
+import { sanitizeHtml } from '@/utils/sanitize'
 
 const router = useRouter()
 const route = useRoute()
@@ -217,8 +218,9 @@ function debounce<T extends (...args: any[]) => any>(fn: T, delay: number): (...
 /** 标题关键词高亮 (HTML-safe: 只对非 HTML 标题执行替换) */
 function highlightKeyword(text: string, kw: string): string {
   if (!text || !kw) return text
+  const safeText = sanitizeHtml(text)
   const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return text.replace(new RegExp(`(${escaped})`, 'gi'), '<mark class="search-highlight">$1</mark>')
+  return safeText.replace(new RegExp(`(${escaped})`, 'gi'), '<mark class="search-highlight">$1</mark>')
 }
 
 /** 执行搜索：全量拉取文章后本地过滤 */
@@ -786,7 +788,8 @@ onMounted(() => {
   padding: var(--spacing-xs) 0;
 }
 
-.search-highlight {
+/* G17: v-html 注入的 <mark> 元素不受 scoped CSS 影响，使用 :global() 穿透 */
+:global(.search-highlight) {
   background: #fff3b0;
   color: #333;
   padding: 0 2px;

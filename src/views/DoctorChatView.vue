@@ -7,6 +7,11 @@ import { useAuthStore } from '@/stores/authStore'
 import { getDoctorInfo } from '@/composables/useChatApi'
 import { renderMarkdown } from '@/composables/useMarkdown'
 import type { Doctor } from '@/types/api'
+import SkeletonLoader from '@/components/SkeletonLoader.vue'
+import ErrorRetry from '@/components/ErrorRetry.vue'
+import EmptyState from '@/components/EmptyState.vue'
+import type { ConversationHistoryItem } from '@/types/sse'
+import DisclaimerBar from '@/components/DisclaimerBar.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -94,7 +99,7 @@ function goBack() {
 function clearChat() {
   const id = Number(route.params.id)
   chatStore.clearDoctorConversation(id)
-  chatStore.conversations.length = 0
+  chatStore.clearMessages()
 }
 
 // ===== 自动滚动到底部 =====
@@ -159,7 +164,7 @@ function selectHistorySession(item: ConversationHistoryItem): void {
   const doctorId = Number(route.params.id)
   chatStore.setDoctorConversation(doctorId, item.conversation_id)
   // 清空当前消息列表以展示新会话上下文
-  chatStore.conversations.length = 0
+  chatStore.clearMessages()
   showHistoryPanel.value = false
   chatStore.clearConversationHistory()
 }
@@ -189,7 +194,7 @@ watch(
   (newId, oldId) => {
     if (newId !== oldId && oldId !== undefined) {
       chatStore.abortActiveConnection()
-      chatStore.conversations.length = 0
+      chatStore.clearMessages()
       loadDoctor()
     }
   },
@@ -298,9 +303,7 @@ onUnmounted(() => {
     </div>
 
     <!-- 免责声明条 (对话全程可见) -->
-    <div class="disclaimer-bar">
-      <p>本对话由AI虚拟医师提供，回复内容仅供参考</p>
-    </div>
+    <DisclaimerBar text="本对话由AI虚拟医师提供，回复内容仅供参考，不能替代专业医疗诊断。" />
 
     <!-- 消息列表 (可滚动) -->
     <div
@@ -318,6 +321,23 @@ onUnmounted(() => {
         <i class="fas fa-exclamation-circle error-icon"></i>
         <p>{{ doctorError }}</p>
         <button @click="goBack" class="btn-retry">返回医生列表</button>
+      </div>
+
+      <!-- 空态欢迎 -->
+      <div
+        v-else-if="chatStore.conversations.length === 0 && !chatStore.isStreaming"
+        class="chat-welcome"
+      >
+        <div class="welcome-avatar">
+          <i class="fas fa-user-doctor" aria-hidden="true"></i>
+        </div>
+        <h3>{{ doctor?.name ? '您好，我是' + doctor.name + '医生' : '您好，我是您的AI医生' }}</h3>
+        <p>请问有什么可以帮您？您可以描述症状、用药情况或血糖数据。</p>
+        <div class="example-list">
+          <span class="example-chip">最近血糖控制得怎么样？</span>
+          <span class="example-chip">我的用药方案需要调整吗？</span>
+          <span class="example-chip">饮食上有什么建议？</span>
+        </div>
       </div>
 
       <!-- 消息列表 -->
@@ -438,19 +458,6 @@ onUnmounted(() => {
   color: var(--color-text-secondary);
 }
 
-/* ===== 免责声明条 ===== */
-.disclaimer-bar {
-  padding: 6px var(--spacing-lg);
-  background: rgba(250, 173, 20, 0.1);
-  border-bottom: 1px solid rgba(250, 173, 20, 0.2);
-  flex-shrink: 0;
-}
-.disclaimer-bar p {
-  font-size: 11px;
-  color: #ad8b00;
-  text-align: center;
-  margin: 0;
-}
 
 /* ===== 消息列表 ===== */
 #chat-messages {
@@ -520,6 +527,36 @@ onUnmounted(() => {
   line-height: 1.5;
   word-break: break-word;
   grid-column: 2;
+}
+
+/* G19: Markdown 子元素排版穿透 */
+.msg-content :deep(p) {
+  margin-bottom: var(--spacing-sm);
+}
+.msg-content :deep(ul),
+.msg-content :deep(ol) {
+  padding-left: var(--spacing-lg);
+  margin-bottom: var(--spacing-sm);
+}
+.msg-content :deep(li) {
+  margin-bottom: var(--spacing-xs);
+}
+.msg-content :deep(code) {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  font-family: var(--font-family);
+  font-size: 13px;
+}
+.msg-content :deep(blockquote) {
+  border-left: 3px solid var(--color-primary-light);
+  padding-left: var(--spacing-md);
+  margin: var(--spacing-sm) 0;
+  color: var(--color-text-secondary);
+}
+.msg-content :deep(strong) {
+  color: var(--color-text-primary);
+  font-weight: 600;
 }
 
 /* ===== 对方正在输入... ===== */
@@ -776,4 +813,56 @@ onUnmounted(() => {
   color: var(--color-text-tertiary);
   font-size: 12px;
 }
+/* ===== 空态欢迎（G3） ===== */
+.chat-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--spacing-2xl) 0;
+}
+
+.chat-welcome .welcome-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--color-primary), #0EA5E9);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  margin-bottom: var(--spacing-md);
+}
+
+.chat-welcome h3 {
+  font-size: var(--font-size-h3);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.chat-welcome > p {
+  font-size: var(--font-size-body);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-md);
+  max-width: 280px;
+  line-height: 1.5;
+}
+
+.example-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.example-chip {
+  padding: 8px 16px;
+  border-radius: var(--radius-full);
+  background: var(--color-card);
+  border: 1px solid var(--color-divider);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+}
+
 </style>
